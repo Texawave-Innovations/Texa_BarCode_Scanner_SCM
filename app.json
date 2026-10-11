@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "TexaWave Scanner",
+    "slug": "texawave-barcode-app",
+    "version": "26.10.0-0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.texawave.texascan",
+      "infoPlist": {
+        "NSCameraUsageDescription": "The camera is used to scan product and rack barcodes."
+      }
+    },
+    "android": {
+      "package": "com.texawave.texascan",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow TexaWave Scanner to use the camera to scan barcodes."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "81e5e4aa-e961-4050-8486-e791d6a273de"
+      }
+    },
+    "owner": "texawave_innovations"
+  }
+}
