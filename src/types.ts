@@ -9,6 +9,10 @@ export interface Product {
   productCode: string;
   name: string;
   barcode?: string;
+  category?: string;
+  uom?: string;
+  expiryDate?: string;
+  updatedAt?: number;
 }
 
 export interface Location {
@@ -27,6 +31,7 @@ export interface StockBalance {
   productCode: string;
   warehouseId: string;
   onHand: number;
+  reserved?: number;
 }
 
 export interface PutawayItem {

@@ -35,13 +35,23 @@ function pick(obj: Loose | undefined, keys: string[]): string | undefined {
 
 /** Same flattening as the web app's getSellableProducts(): parent records hold items[] that
  *  carry the real SKU; a few legacy records are flat. */
+function extraFields(src: Loose): Pick<Product, 'category' | 'uom' | 'expiryDate' | 'updatedAt'> {
+  const updatedRaw = pick(src, ['updatedAt', 'lastUpdated', 'modifiedAt']);
+  return {
+    category: pick(src, ['category', 'categoryName', 'productCategory']),
+    uom: pick(src, ['uom', 'unit', 'unitOfMeasure']),
+    expiryDate: pick(src, ['expiryDate', 'expiry', 'batchExpiry']),
+    updatedAt: updatedRaw ? Number(updatedRaw) || undefined : undefined,
+  };
+}
+
 function flattenProducts(raw: Loose[], barcodes: Map<string, string>): Product[] {
   const out: Product[] = [];
   const seen = new Set<string>();
-  const add = (code: string, name: string) => {
+  const add = (code: string, name: string, extra: Loose) => {
     if (seen.has(code)) return;
     seen.add(code);
-    out.push({ productCode: code, name, barcode: barcodes.get(code) });
+    out.push({ productCode: code, name, barcode: barcodes.get(code), ...extraFields(extra) });
   };
   for (const p of raw) {
     const items = Array.isArray(p.items) ? (p.items as Loose[]) : null;
@@ -49,11 +59,11 @@ function flattenProducts(raw: Loose[], barcodes: Map<string, string>): Product[]
       items.forEach((item, idx) => {
         const code = pick(item, ['productCode', 'sku', 'itemCode']) || `${p.id}-${idx + 1}`;
         const name = items.length > 1 ? `${p.name} — ${code}` : String(p.name || code);
-        add(code, name);
+        add(code, name, { ...p, ...item });
       });
     } else {
       const code = pick(p, ['productCode', 'sku']) || String(p.id);
-      add(code, String(p.name || code));
+      add(code, String(p.name || code), p);
     }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -77,7 +87,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
   }
   return {
     products: flattenProducts(rawProducts, barcodes),
-    locations: locations.filter((l) => (l.locationType || 'BIN') === 'BIN'),
+    locations,
     balances,
     putaways: putaways.map((p) => ({ ...p, items: p.items || [] })),
     movements: movements.map((m) => ({ ...m, items: m.items || [] })),
@@ -123,6 +133,11 @@ export function findBin(snap: Snapshot, raw: string): BinMatch {
 
 export const binLabel = (l: Location | undefined) => (l ? l.locationCode || l.binCode || l.locationName || l.id : '—');
 
+const LOCATION_NOUNS: Record<string, string> = { BIN: 'bin', RACK: 'rack', SHELF: 'shelf', ZONE: 'zone' };
+
+/** "bin"/"rack"/"shelf"/"zone" (or whatever the ERP's locationType maps to) for UI copy. */
+export const locationNoun = (l: Location | undefined) => LOCATION_NOUNS[(l?.locationType || '').toUpperCase()] || 'bin';
+
 // ---------------------------------------------------------------------------
 // Bin stock (mirrors computeLocationStock in warehouseHelpers.ts)
 // ---------------------------------------------------------------------------
@@ -167,9 +182,20 @@ export function productPlacement(snap: Snapshot, productCode: string) {
     if (q > 0) bins.push({ location: loc, quantity: q });
   }
   bins.sort((a, b) => binLabel(a.location).localeCompare(binLabel(b.location)));
-  const onHand = snap.balances.filter((b) => b.productCode === productCode).reduce((s, b) => s + (b.onHand || 0), 0);
+  const productBalances = snap.balances.filter((b) => b.productCode === productCode);
+  const onHand = productBalances.reduce((s, b) => s + (b.onHand || 0), 0);
+  const reserved = productBalances.reduce((s, b) => s + (b.reserved || 0), 0);
   const inBins = bins.reduce((s, b) => s + b.quantity, 0);
-  return { bins, onHand, inBins, unassigned: Math.max(0, onHand - inBins) };
+  return { bins, onHand, reserved, available: Math.max(0, onHand - reserved), inBins, unassigned: Math.max(0, onHand - inBins) };
+}
+
+/** Warehouses currently holding on-hand stock of a product. */
+export function productWarehouses(snap: Snapshot, productCode: string): string[] {
+  const ids = new Set<string>();
+  for (const b of snap.balances) {
+    if (b.productCode === productCode && b.onHand > 0) ids.add(b.warehouseId);
+  }
+  return Array.from(ids).sort();
 }
 
 export function binContents(snap: Snapshot, loc: Location) {

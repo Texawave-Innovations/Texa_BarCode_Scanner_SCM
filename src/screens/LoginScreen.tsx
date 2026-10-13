@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import SupplyChainLoadingScreen, { LOADER_CYCLE_MS } from '../components/SupplyChainLoadingScreen';
 import { Button } from '../components/ui';
 import { login } from '../data';
 import { useSession } from '../session';
 import { colors } from '../theme';
+
+// Keep the loading animation on screen for at least one full phase cycle so a fast (e.g.
+// cached/native) login doesn't swap the navigator mid-cycle and cut the animation short.
+const MIN_LOADER_MS = LOADER_CYCLE_MS;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function LoginScreen() {
   const { setUser } = useSession();
@@ -13,11 +19,16 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
+    if (busy) return;
     if (!id.trim() || !pw) { setError('Enter your email/username and password.'); return; }
     setBusy(true); setError(null);
-    try { setUser(await login(id, pw)); }
-    catch (e) { setError(e instanceof Error ? e.message : 'Login failed.'); }
-    finally { setBusy(false); }
+    const start = Date.now();
+    try {
+      const user = await login(id, pw);
+      const remaining = MIN_LOADER_MS - (Date.now() - start);
+      if (remaining > 0) await sleep(remaining);
+      setUser(user);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Login failed.'); setBusy(false); }
   };
 
   return (
@@ -25,11 +36,12 @@ export default function LoginScreen() {
       <Text style={styles.title}>TexaWave Scanner</Text>
       <Text style={styles.sub}>Sign in with your ERP account</Text>
       <View style={{ gap: 12, marginTop: 24 }}>
-        <TextInput style={styles.input} placeholder="Email or username" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} value={id} onChangeText={setId} />
-        <TextInput style={styles.input} placeholder="Password" placeholderTextColor={colors.muted} secureTextEntry value={pw} onChangeText={setPw} onSubmitEditing={submit} />
+        <TextInput style={styles.input} placeholder="Email or username" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} value={id} onChangeText={setId} editable={!busy} />
+        <TextInput style={styles.input} placeholder="Password" placeholderTextColor={colors.muted} secureTextEntry value={pw} onChangeText={setPw} onSubmitEditing={submit} editable={!busy} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button title="Sign in" onPress={submit} loading={busy} />
+        <Button title="Sign in" onPress={submit} loading={busy} disabled={busy} />
       </View>
+      {busy ? <SupplyChainLoadingScreen /> : null}
     </KeyboardAvoidingView>
   );
 }

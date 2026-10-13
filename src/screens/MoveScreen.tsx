@@ -26,7 +26,8 @@ export default function MoveScreen({ route, navigation }: NativeStackScreenProps
   const product = snap.products.find((p) => p.productCode === route.params.productCode);
   if (!product) return <Text style={styles.error}>Product not found.</Text>;
   const { bins } = productPlacement(snap, product.productCode);
-  const source = from || (bins.length === 1 ? bins[0].location : null);
+  const preset = route.params.sourceLocationId ? bins.find((b) => b.location.id === route.params.sourceLocationId)?.location ?? null : null;
+  const source = from || preset || (bins.length === 1 ? bins[0].location : null);
   const sourceQty = bins.find((b) => b.location.id === source?.id)?.quantity ?? 0;
 
   const scanBin = (raw: string, onOk: (l: Location) => void) => {

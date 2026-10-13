@@ -20,7 +20,7 @@ export type RootStack = {
   Product: { productCode: string };
   Bin: { locationId: string };
   Add: { productCode: string };
-  Move: { productCode: string };
+  Move: { productCode: string; sourceLocationId?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStack>();
@@ -30,7 +30,7 @@ export default function Navigation() {
   if (!ready) return <Loading />;
   return (
     <NavigationContainer>
-      <Stack.Navigator>
+      <Stack.Navigator screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
         {user ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'TexaWave Scanner' }} />
