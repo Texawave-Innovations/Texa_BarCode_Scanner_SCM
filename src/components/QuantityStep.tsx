@@ -17,7 +17,18 @@ export function QuantityStep({ rows, max, initial, confirmLabel, busy, error, on
         <Text style={styles.label}>Quantity</Text>
         <View style={styles.stepper}>
           <Button title="−" variant="secondary" onPress={() => set((qty || 0) - 1)} style={styles.sq} />
-          <TextInput style={styles.qty} keyboardType="number-pad" value={text} onChangeText={(t) => setText(t.replace(/[^0-9]/g, ''))} selectTextOnFocus onFocus={onFocus} />
+          <TextInput
+            style={styles.qty}
+            keyboardType="number-pad"
+            value={text}
+            onChangeText={(t) => {
+              const digits = t.replace(/[^0-9]/g, '');
+              if (digits === '') { setText(''); return; }
+              setText(String(Math.min(max, Number(digits))));
+            }}
+            selectTextOnFocus
+            onFocus={onFocus}
+          />
           <Button title="+" variant="secondary" onPress={() => set((qty || 0) + 1)} style={styles.sq} />
         </View>
       </Card>
