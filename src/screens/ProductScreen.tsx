@@ -47,8 +47,6 @@ export default function ProductScreen({ route, navigation }: NativeStackScreenPr
           <DetailItem label="Warehouse(s)" value={warehouses.length ? warehouses.join(', ') : '—'} />
           <DetailItem label="Rack / Bin Location(s)" value={binLocations || 'Not tracked'} />
           <DetailItem label="Stock Status" value={stockStatus} />
-          <DetailItem label="Expiry Date" value={product.expiryDate || '—'} />
-          <DetailItem label="Last Updated" value={product.updatedAt ? new Date(product.updatedAt).toLocaleString() : '—'} />
         </DetailGrid>
       </Card>
 
@@ -64,6 +62,7 @@ export default function ProductScreen({ route, navigation }: NativeStackScreenPr
       <Button title="ADD to a bin" onPress={() => navigation.navigate('Add', { productCode })} disabled={unassigned <= 0} />
       {unassigned <= 0 ? <Text style={styles.hint}>Nothing is waiting for a bin. Receive stock (GRN) in the ERP first.</Text> : null}
       <Button title="MOVE between bins" variant="secondary" onPress={() => navigation.navigate('Move', { productCode })} disabled={bins.length === 0} />
+      <Button title="REMOVE stock" variant="danger" onPress={() => navigation.navigate('Remove', { productCode })} disabled={bins.length === 0} />
     </ScrollView>
   );
 }

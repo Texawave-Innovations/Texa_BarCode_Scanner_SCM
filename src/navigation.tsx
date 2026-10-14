@@ -8,6 +8,7 @@ import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import MoveScreen from './screens/MoveScreen';
 import ProductScreen from './screens/ProductScreen';
+import RemoveScreen from './screens/RemoveScreen';
 import ScanScreen from './screens/ScanScreen';
 import SearchScreen from './screens/SearchScreen';
 import { useSession } from './session';
@@ -21,6 +22,7 @@ export type RootStack = {
   Bin: { locationId: string };
   Add: { productCode: string };
   Move: { productCode: string; sourceLocationId?: string };
+  Remove: { productCode: string; sourceLocationId?: string };
 };
 
 const Stack = createNativeStackNavigator<RootStack>();
@@ -40,6 +42,7 @@ export default function Navigation() {
             <Stack.Screen name="Bin" component={BinScreen} options={{ title: 'Bin' }} />
             <Stack.Screen name="Add" component={AddScreen} options={{ title: 'Add to bin' }} />
             <Stack.Screen name="Move" component={MoveScreen} options={{ title: 'Move' }} />
+            <Stack.Screen name="Remove" component={RemoveScreen} options={{ title: 'Remove stock' }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

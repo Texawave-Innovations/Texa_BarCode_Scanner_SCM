@@ -36,12 +36,20 @@ export default function BinScreen({ route, navigation }: NativeStackScreenProps<
                   {r.product.productCode} · {r.quantity}{r.product.uom ? ` ${r.product.uom}` : ' unit(s)'}
                 </Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [styles.moveChip, pressed && { opacity: 0.6 }]}
-                onPress={() => navigation.navigate('Move', { productCode: r.product.productCode, sourceLocationId: loc.id })}
-              >
-                <Text style={styles.moveChipText}>Move ›</Text>
-              </Pressable>
+              <View style={styles.chipRow}>
+                <Pressable
+                  style={({ pressed }) => [styles.moveChip, pressed && { opacity: 0.6 }]}
+                  onPress={() => navigation.navigate('Move', { productCode: r.product.productCode, sourceLocationId: loc.id })}
+                >
+                  <Text style={styles.moveChipText}>Move ›</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.removeChip, pressed && { opacity: 0.6 }]}
+                  onPress={() => navigation.navigate('Remove', { productCode: r.product.productCode, sourceLocationId: loc.id })}
+                >
+                  <Text style={styles.removeChipText}>Remove ›</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         )}
@@ -60,6 +68,9 @@ const styles = StyleSheet.create({
   productInfo: { flex: 1, marginRight: 12 },
   productName: { fontSize: 15, fontWeight: '700', color: colors.text },
   productMeta: { fontSize: 13, color: colors.muted, marginTop: 2 },
+  chipRow: { flexDirection: 'row', gap: 8 },
   moveChip: { backgroundColor: colors.bg, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
   moveChipText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  removeChip: { backgroundColor: colors.bg, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  removeChipText: { color: colors.danger, fontSize: 13, fontWeight: '700' },
 });

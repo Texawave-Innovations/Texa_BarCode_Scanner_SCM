@@ -11,8 +11,11 @@ export interface Product {
   barcode?: string;
   category?: string;
   uom?: string;
-  expiryDate?: string;
-  updatedAt?: number;
+}
+
+export interface Warehouse {
+  id: string;
+  name: string;
 }
 
 export interface Location {
@@ -49,8 +52,10 @@ export interface Putaway {
 export interface Movement {
   warehouseId: string;
   status: string;
+  movementType?: 'BIN_TO_BIN' | 'STOCK_OUT';
   sourceLocationId: string;
-  destinationLocationId: string;
+  destinationLocationId?: string;
+  reason?: string;
   items: { productCode: string; quantity: number }[];
 }
 
@@ -69,4 +74,5 @@ export interface Snapshot {
   putaways: Putaway[];
   movements: Movement[];
   pickings: Picking[];
+  warehouses: Warehouse[];
 }

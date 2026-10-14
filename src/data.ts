@@ -1,11 +1,12 @@
 import { get, push, ref, set } from 'firebase/database';
 import { database } from './firebase';
-import type { AppUser, Location, Movement, Picking, Product, Putaway, Snapshot, StockBalance } from './types';
+import type { AppUser, Location, Movement, Picking, Product, Putaway, Snapshot, StockBalance, Warehouse } from './types';
 
 // Paths shared with the ERP web app (see SCM/src/modules/scm/**/…Paths.ts).
 const PATHS = {
   products: 'sales/products',
   settings: 'scm/inventory/settings',
+  warehouses: 'scm/warehouses',
   locations: 'scm/locations',
   balances: 'scm/inventory/stockBalances',
   putaways: 'scm/warehouse/putaways',
@@ -35,14 +36,22 @@ function pick(obj: Loose | undefined, keys: string[]): string | undefined {
 
 /** Same flattening as the web app's getSellableProducts(): parent records hold items[] that
  *  carry the real SKU; a few legacy records are flat. */
-function extraFields(src: Loose): Pick<Product, 'category' | 'uom' | 'expiryDate' | 'updatedAt'> {
-  const updatedRaw = pick(src, ['updatedAt', 'lastUpdated', 'modifiedAt']);
+function extraFields(src: Loose): Pick<Product, 'category' | 'uom'> {
   return {
     category: pick(src, ['category', 'categoryName', 'productCategory']),
     uom: pick(src, ['uom', 'unit', 'unitOfMeasure']),
-    expiryDate: pick(src, ['expiryDate', 'expiry', 'batchExpiry']),
-    updatedAt: updatedRaw ? Number(updatedRaw) || undefined : undefined,
   };
+}
+
+/** Spreads `override` onto `base`, but never lets an empty/null/undefined value in
+ *  `override` blank out a real value already present in `base` (Firebase RTDB items
+ *  commonly carry stray empty-string keys for fields they don't actually own). */
+function mergeNonEmpty(base: Loose, override: Loose): Loose {
+  const merged: Loose = { ...base };
+  for (const [k, v] of Object.entries(override)) {
+    if (v !== undefined && v !== null && v !== '') merged[k] = v;
+  }
+  return merged;
 }
 
 function flattenProducts(raw: Loose[], barcodes: Map<string, string>): Product[] {
@@ -59,7 +68,7 @@ function flattenProducts(raw: Loose[], barcodes: Map<string, string>): Product[]
       items.forEach((item, idx) => {
         const code = pick(item, ['productCode', 'sku', 'itemCode']) || `${p.id}-${idx + 1}`;
         const name = items.length > 1 ? `${p.name} — ${code}` : String(p.name || code);
-        add(code, name, { ...p, ...item });
+        add(code, name, mergeNonEmpty(p, item));
       });
     } else {
       const code = pick(p, ['productCode', 'sku']) || String(p.id);
@@ -70,9 +79,10 @@ function flattenProducts(raw: Loose[], barcodes: Map<string, string>): Product[]
 }
 
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [rawProducts, settings, locations, balances, putaways, movements, pickings] = await Promise.all([
+  const [rawProducts, settings, rawWarehouses, locations, balances, putaways, movements, pickings] = await Promise.all([
     readList(PATHS.products),
     readList(PATHS.settings),
+    readList(PATHS.warehouses),
     readList<Location>(PATHS.locations),
     readList<StockBalance>(PATHS.balances),
     readList<Putaway>(PATHS.putaways),
@@ -85,6 +95,10 @@ export async function loadSnapshot(): Promise<Snapshot> {
     const bc = pick(s, ['barcode']);
     if (code && bc) barcodes.set(code, bc.trim());
   }
+  const warehouses: Warehouse[] = rawWarehouses.map((w) => ({
+    id: w.id,
+    name: pick(w, ['name', 'warehouseName', 'label', 'title']) || w.id,
+  }));
   return {
     products: flattenProducts(rawProducts, barcodes),
     locations,
@@ -92,6 +106,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     putaways: putaways.map((p) => ({ ...p, items: p.items || [] })),
     movements: movements.map((m) => ({ ...m, items: m.items || [] })),
     pickings: pickings.map((p) => ({ ...p, items: p.items || [] })),
+    warehouses,
   };
 }
 
@@ -153,7 +168,7 @@ export function computeBinStock(snap: Snapshot): Map<string, number> {
     if (m.status !== 'COMPLETED') continue;
     for (const i of m.items) {
       add(key(i.productCode, m.warehouseId, m.sourceLocationId), -i.quantity);
-      add(key(i.productCode, m.warehouseId, m.destinationLocationId), i.quantity);
+      if (m.destinationLocationId) add(key(i.productCode, m.warehouseId, m.destinationLocationId), i.quantity);
     }
   }
   for (const pk of snap.pickings) {
@@ -189,13 +204,20 @@ export function productPlacement(snap: Snapshot, productCode: string) {
   return { bins, onHand, reserved, available: Math.max(0, onHand - reserved), inBins, unassigned: Math.max(0, onHand - inBins) };
 }
 
-/** Warehouses currently holding on-hand stock of a product. */
+/** Display name for a warehouse id, falling back to the id if it has no master record. */
+export function warehouseName(snap: Snapshot, warehouseId: string): string {
+  return snap.warehouses.find((w) => w.id === warehouseId)?.name || warehouseId;
+}
+
+/** Warehouses currently holding on-hand stock of a product (display names, not ids). */
 export function productWarehouses(snap: Snapshot, productCode: string): string[] {
   const ids = new Set<string>();
   for (const b of snap.balances) {
     if (b.productCode === productCode && b.onHand > 0) ids.add(b.warehouseId);
   }
-  return Array.from(ids).sort();
+  return Array.from(ids)
+    .map((id) => warehouseName(snap, id))
+    .sort();
 }
 
 export function binContents(snap: Snapshot, loc: Location) {
@@ -293,6 +315,35 @@ export async function moveBetweenBins(snap: Snapshot, user: AppUser, product: Pr
     notes: 'Created from the mobile barcode app',
   });
   await audit(PATHS.movements, newRef.key as string, 'Movement completed (mobile)', user.name, `${number}: ${qty} × ${product.productCode} ${binLabel(from)} → ${binLabel(to)}`);
+  return number;
+}
+
+/** STOCK OUT: record product physically taken out of a bin (no destination bin). */
+export async function removeFromBin(snap: Snapshot, user: AppUser, product: Product, from: Location, qty: number, reason: string, note?: string) {
+  if (!(qty > 0) || !Number.isInteger(qty)) throw new Error('Enter a whole quantity greater than zero.');
+  const available = stockInBin(computeBinStock(snap), product.productCode, from);
+  if (qty > available) throw new Error(`Only ${available} unit(s) of ${product.productCode} are in ${binLabel(from)}.`);
+
+  const newRef = push(ref(database, PATHS.movements));
+  const number = `MOB/OUT/${stamp()}`;
+  const now = Date.now();
+  await set(newRef, {
+    id: newRef.key,
+    movementNumber: number,
+    movementType: 'STOCK_OUT',
+    warehouseId: from.warehouseId,
+    sourceLocationId: from.id,
+    items: [{ productCode: product.productCode, productName: product.name, quantity: qty }],
+    status: 'COMPLETED',
+    reason,
+    requestedBy: user.name,
+    approvedBy: user.name,
+    completedBy: user.name,
+    createdAt: now,
+    completedAt: now,
+    notes: note || 'Created from the mobile barcode app',
+  });
+  await audit(PATHS.movements, newRef.key as string, 'Stock out completed (mobile)', user.name, `${number}: ${qty} × ${product.productCode} out of ${binLabel(from)} (${reason})`);
   return number;
 }
 
